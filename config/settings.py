@@ -133,6 +133,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # OWASP Security Headers
 # ---------------------------------------------------------------------------
 SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT") and not DEBUG
+
+# Gunicorn only ever sees plain HTTP from nginx, so without this Django judges
+# every request insecure and SECURE_SSL_REDIRECT bounces it to HTTPS forever.
+# Only safe because nothing but the local reverse proxy can reach port 8000 —
+# it is bound to 127.0.0.1 in docker-compose.yml. Set the header in nginx with
+# `proxy_set_header X-Forwarded-Proto $scheme;` so a client cannot forge it.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 SECURE_HSTS_SECONDS = 31_536_000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
