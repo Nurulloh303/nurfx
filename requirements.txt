@@ -1,0 +1,35 @@
+# Django & DRF
+Django>=5.1,<5.2
+djangorestframework>=3.15,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+django-cors-headers>=4.4,<5.0
+django-environ>=0.11,<1.0
+django-ratelimit>=4.1,<5.0
+drf-spectacular>=0.30,<1.0
+
+# Database
+psycopg[binary]>=3.2,<4.0
+
+# Auth
+google-auth>=2.35,<3.0
+requests>=2.32,<3.0
+
+# Async tasks
+celery[redis]>=5.4,<6.0
+redis>=5.0,<6.0
+
+# AI SDK
+anthropic>=0.116,<1.0
+
+# Image processing
+Pillow>=11.0,<12.0
+
+# Telegram Bot
+aiogram>=3.13,<4.0
+
+# Production
+gunicorn>=23.0,<24.0
+whitenoise>=6.7,<7.0
+
+# Dev
+python-dotenv>=1.0,<2.0

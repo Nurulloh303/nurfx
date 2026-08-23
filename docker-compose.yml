@@ -1,0 +1,93 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nurfx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-nurfx_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # No host port mapping — reachable only from other containers on the
+    # compose network. Exposing 5432 to the host exposes it to the internet
+    # on most default VPS firewall setups.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nurfx} -d ${POSTGRES_DB:-nurfx_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Cap Redis so a backlog can't eat the box; it only holds the Celery queue
+    # and the rate-limit cache, both small.
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    # No host port mapping — internal network only, same reasoning as db.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Worker counts are sized for a 1 vCPU / 1 GB box. Raise them only after
+  # moving to a bigger droplet — each extra worker is another full Django
+  # process (~150 MB), and an OOM kill here looks like random 502s.
+  web:
+    build: .
+    restart: unless-stopped
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120
+    volumes:
+      - .:/app
+      - media_data:/app/media
+    ports:
+      # Bound to localhost: nginx terminates TLS and proxies to it. Publishing
+      # 8000 on 0.0.0.0 would serve the app over plain HTTP to the internet,
+      # bypassing the HTTPS redirect and exposing the admin panel.
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_worker:
+    build: .
+    restart: unless-stopped
+    # Concurrency 2: each analysis is one long Claude call, so these processes
+    # spend their time waiting on the network, not on CPU.
+    command: celery -A config worker -l info -Q default,ai_pipeline -c 2 --max-tasks-per-child 50
+    volumes:
+      - .:/app
+      - media_data:/app/media
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # celery_beat is intentionally absent: nothing defines a periodic schedule
+  # (see config/celery.py). Add it back alongside the first CELERY_BEAT_SCHEDULE
+  # entry — until then it is a third idle Django process on a 1 GB box.
+
+  telegram_bot:
+    build: .
+    restart: unless-stopped
+    command: python -m apps.bot.runner
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:
