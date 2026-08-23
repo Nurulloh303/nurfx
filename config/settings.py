@@ -5,6 +5,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,6 +27,20 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.
 # Admin panel path — override in production to a non-default, hard-to-guess
 # value (e.g. "secure-panel-x7f2/") so it isn't a predictable scan target.
 DJANGO_ADMIN_URL = env("DJANGO_ADMIN_URL", default="admin/")
+
+# A malformed value here breaks the import of urls.py, which takes down every
+# endpoint — not just the admin — with a traceback that points at Django's URL
+# resolver rather than at .env. Fail with the actual cause instead.
+if "<" in DJANGO_ADMIN_URL or ">" in DJANGO_ADMIN_URL:
+    raise ImproperlyConfigured(
+        f"DJANGO_ADMIN_URL is {DJANGO_ADMIN_URL!r} — the angle brackets are "
+        "placeholder syntax from .env.example. Set a real path, e.g. "
+        "DJANGO_ADMIN_URL=nurfx-panel-7x2f/"
+    )
+if not DJANGO_ADMIN_URL.endswith("/"):
+    raise ImproperlyConfigured(
+        f"DJANGO_ADMIN_URL is {DJANGO_ADMIN_URL!r} — it must end with '/'."
+    )
 
 # ---------------------------------------------------------------------------
 # Applications
