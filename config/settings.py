@@ -260,9 +260,11 @@ NURFX_SUBSCRIPTION_PACKAGES = {
     "VIP_MAX": {"tokens": 210, "price_uzs": 1_197_000, "price_per_token": 5_700},
 }
 
-NURFX_PAYMENT_CARD_NUMBER = env("NURFX_PAYMENT_CARD_NUMBER", default="9860 1701 1213 5596")
-NURFX_PAYMENT_CARD_HOLDER = env("NURFX_PAYMENT_CARD_HOLDER", default="Nurulloh Mahmudilyev")
-NURFX_ADMIN_TELEGRAM_USERNAME = env("NURFX_ADMIN_TELEGRAM_USERNAME", default="makhmudaliiyev")
+# Payment details are personal data (card number, legal name) — they belong in
+# .env, never in a committed default.
+NURFX_PAYMENT_CARD_NUMBER = env("NURFX_PAYMENT_CARD_NUMBER", default="")
+NURFX_PAYMENT_CARD_HOLDER = env("NURFX_PAYMENT_CARD_HOLDER", default="")
+NURFX_ADMIN_TELEGRAM_USERNAME = env("NURFX_ADMIN_TELEGRAM_USERNAME", default="")
 
 # ---------------------------------------------------------------------------
 # External API Keys (never hardcoded — loaded from env)

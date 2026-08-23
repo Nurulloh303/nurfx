@@ -57,13 +57,36 @@ def _redeem_coupon_for_telegram_user(telegram_id: int, code: str):
 
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-BOT_MAIN_KEYBOARD = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 nurfxai.uz saytiga o'tish", url="https://nurfxai.uz")],
-        [InlineKeyboardButton(text="💳 Token sotib olish (Rekvizitlar)", callback_data="buy_tokens")],
-        [InlineKeyboardButton(text="💬 Admin bilan bog'lanish", url="https://t.me/makhmudaliiyev")],
-    ]
+SITE_BUTTON = InlineKeyboardButton(
+    text="🌐 nurfxai.uz saytiga o'tish", url="https://nurfxai.uz"
 )
+
+
+def _admin_button(label: str) -> list[InlineKeyboardButton]:
+    """Contact-admin row, omitted when no username is configured.
+
+    Telegram rejects a button whose URL is just https://t.me/, so an unset
+    NURFX_ADMIN_TELEGRAM_USERNAME must drop the row rather than build one.
+    """
+    username = settings.NURFX_ADMIN_TELEGRAM_USERNAME
+    if not username:
+        return []
+    return [InlineKeyboardButton(text=label.format(username=username), url=f"https://t.me/{username}")]
+
+
+def main_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [SITE_BUTTON],
+        [InlineKeyboardButton(text="💳 Token sotib olish (Rekvizitlar)", callback_data="buy_tokens")],
+    ]
+    admin_row = _admin_button("💬 Admin bilan bog'lanish")
+    if admin_row:
+        rows.append(admin_row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def website_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[SITE_BUTTON]])
 
 
 @router.message(CommandStart())
@@ -100,7 +123,7 @@ async def cmd_start(message: Message):
             "<code>/generate_coupon tokens=21 price=168000</code>"
         )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=BOT_MAIN_KEYBOARD)
+    await message.answer(text, parse_mode="HTML", reply_markup=main_keyboard())
 
 
 @router.message(Command("buy"))
@@ -134,14 +157,15 @@ async def send_payment_info(message: Message):
         f"3. Tokenlar balansingizga qo'shiladi va <b>nurfxai.uz</b> saytida ishlatasiz."
     )
 
-    buy_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"💬 Chekni Adminga yuborish (@{admin_username})", url=f"https://t.me/{admin_username}")],
-            [InlineKeyboardButton(text="🌐 nurfxai.uz saytiga o'tish", url="https://nurfxai.uz")],
-        ]
-    )
+    rows = []
+    admin_row = _admin_button("💬 Chekni Adminga yuborish (@{username})")
+    if admin_row:
+        rows.append(admin_row)
+    rows.append([SITE_BUTTON])
 
-    await message.answer(text, parse_mode="HTML", reply_markup=buy_keyboard)
+    await message.answer(
+        text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
+    )
 
 
 @router.message(Command("generate_coupon"))
@@ -195,7 +219,7 @@ async def cmd_redeem(message: Message):
             f"💰 Yangi balans: <b>{info}</b> token\n\n"
             f"🌐 Endi <b>nurfxai.uz</b> saytida tahlil qilishingiz mumkin!",
             parse_mode="HTML",
-            reply_markup=WEB_SITE_KEYBOARD,
+            reply_markup=website_keyboard(),
         )
 
 
@@ -217,7 +241,7 @@ async def cmd_balance(message: Message):
         await message.answer(
             "⚠️ Hisobingiz bog'lanmagan. Avval <b>nurfxai.uz</b> sayti orqali kiring.",
             parse_mode="HTML",
-            reply_markup=WEB_SITE_KEYBOARD,
+            reply_markup=website_keyboard(),
         )
     else:
         from django.conf import settings as django_settings
@@ -226,7 +250,7 @@ async def cmd_balance(message: Message):
             f"💰 Token balansingiz: <b>{balance}</b> token\n"
             f"📊 Mavjud tahlillar: <b>{balance // cost}</b> ta",
             parse_mode="HTML",
-            reply_markup=WEB_SITE_KEYBOARD,
+            reply_markup=website_keyboard(),
         )
 
 
@@ -236,7 +260,7 @@ async def handle_photo_analysis(message: Message):
         "🌐 Grafiklarni tahlil qilish <b>nurfxai.uz</b> saytida amalga oshiriladi.\n\n"
         "Tahlil o'tkazish uchun saytga o'ting:",
         parse_mode="HTML",
-        reply_markup=WEB_SITE_KEYBOARD,
+        reply_markup=website_keyboard(),
     )
 
 
