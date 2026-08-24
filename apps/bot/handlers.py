@@ -58,9 +58,13 @@ def _redeem_coupon_for_telegram_user(telegram_id: int, code: str):
 
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-SITE_BUTTON = InlineKeyboardButton(
-    text="🌐 nurfxai.uz saytiga o'tish", url="https://nurfxai.uz"
-)
+def _site_row() -> list[list[InlineKeyboardButton]]:
+    """Link to the site, or nothing while NURFX_SITE_URL is unset."""
+    url = settings.NURFX_SITE_URL
+    if not url:
+        return []
+    label = url.split("://")[-1].rstrip("/")
+    return [[InlineKeyboardButton(text=f"🌐 {label} saytiga o'tish", url=url)]]
 
 
 def _admin_button(label: str) -> list[InlineKeyboardButton]:
@@ -77,17 +81,19 @@ def _admin_button(label: str) -> list[InlineKeyboardButton]:
 
 def main_keyboard() -> InlineKeyboardMarkup:
     rows = [
-        [SITE_BUTTON],
         [InlineKeyboardButton(text="💳 Token sotib olish (Rekvizitlar)", callback_data="buy_tokens")],
     ]
+    rows += _site_row()
     admin_row = _admin_button("💬 Admin bilan bog'lanish")
     if admin_row:
         rows.append(admin_row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def website_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[SITE_BUTTON]])
+def website_keyboard() -> InlineKeyboardMarkup | None:
+    """None when there is no site — Telegram rejects an empty keyboard."""
+    rows = _site_row()
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
 @sync_to_async
@@ -176,14 +182,14 @@ async def send_payment_info(message: Message):
         f"📲 <b>To'lovdan so'ng:</b>\n"
         f"1. To'lov chekini @{admin_username} ga yuboring.\n"
         f"2. Admin sizga taqdim etgan kupon kodini botda <code>/redeem KOD</code> orqali faollashtirasiz!\n"
-        f"3. Tokenlar balansingizga qo'shiladi va <b>nurfxai.uz</b> saytida ishlatasiz."
+        f"3. Tokenlar balansingizga qo'shiladi — grafikni shu yerga yuborib tahlil qilasiz."
     )
 
     rows = []
     admin_row = _admin_button("💬 Chekni Adminga yuborish (@{username})")
     if admin_row:
         rows.append(admin_row)
-    rows.append([SITE_BUTTON])
+    rows += _site_row()
 
     await message.answer(
         text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
@@ -237,9 +243,9 @@ async def cmd_redeem(message: Message):
     else:
         await message.answer(
             f"🎉 <b>Kupon faollashtirildi!</b>\n\n"
-            f"➕ Qushildi: <b>{result.token_amount}</b> token\n"
+            f"➕ Qo'shildi: <b>{result.token_amount}</b> token\n"
             f"💰 Yangi balans: <b>{info}</b> token\n\n"
-            f"🌐 Endi <b>nurfxai.uz</b> saytida tahlil qilishingiz mumkin!",
+            f"📸 Endi grafik skrinshotini yuborib tahlil qilishingiz mumkin!",
             parse_mode="HTML",
             reply_markup=website_keyboard(),
         )

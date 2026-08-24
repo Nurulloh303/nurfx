@@ -283,6 +283,11 @@ NURFX_SUBSCRIPTION_PACKAGES = {
     "VIP_MAX": {"tokens": 210, "price_uzs": 1_197_000, "price_per_token": 5_700},
 }
 
+# Public site URL. Empty while the frontend does not exist yet: the bot hides
+# its "go to the site" buttons and wording rather than sending users to a dead
+# link. Set it once the site is live and the buttons come back.
+NURFX_SITE_URL = env("NURFX_SITE_URL", default="")
+
 # Payment details are personal data (card number, legal name) — they belong in
 # .env, never in a committed default.
 NURFX_PAYMENT_CARD_NUMBER = env("NURFX_PAYMENT_CARD_NUMBER", default="")
@@ -312,6 +317,11 @@ AI_CLAUDE_MAX_TOKENS = env.int("AI_CLAUDE_MAX_TOKENS", default=16_000)
 # and latency; sweep it against your own results rather than assuming higher is
 # better. `xhigh` is worth testing for charts the model finds ambiguous.
 AI_CLAUDE_EFFORT = env("AI_CLAUDE_EFFORT", default="high")
+
+# Language for the free-text fields the model writes (summary, level
+# descriptions, warnings). Must stay constant across requests — it is part of
+# the cached system prompt.
+AI_OUTPUT_LANGUAGE = env("AI_OUTPUT_LANGUAGE", default="Uzbek (latin script)")
 
 # Server-side fallback re-runs a request another model refused, instead of
 # failing the analysis. Chart analysis rarely trips safety classifiers, so turn

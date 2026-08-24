@@ -67,6 +67,23 @@ chart shows and why this setup follows from it. No headings, no restating the \
 JSON fields."""
 
 
+LANGUAGE_INSTRUCTION = """
+
+Language: write every free-text field — analysis_summary, each \
+key_levels[].description, every entry in warnings, and rejection_reason — in \
+{language}. Keep ICT/SMC terminology (order block, FVG, MSS, liquidity sweep, \
+BOS) and instrument names in their usual English form; traders read and say \
+them that way, and translating them makes the analysis harder to follow. \
+Prices stay as digits. Enum fields (signal, bias) keep their schema values."""
+
+
+def build_system_prompt() -> str:
+    """Assemble the cached prefix. Constant per deployment, so it stays cached."""
+    return SYSTEM_PROMPT + LANGUAGE_INSTRUCTION.format(
+        language=settings.AI_OUTPUT_LANGUAGE
+    )
+
+
 ZOOM_TOOL = {
     "name": "zoom_chart_region",
     "description": (
@@ -288,7 +305,7 @@ def analyze_chart(
         "system": [
             {
                 "type": "text",
-                "text": SYSTEM_PROMPT,
+                "text": build_system_prompt(),
                 "cache_control": {"type": "ephemeral"},
             }
         ],

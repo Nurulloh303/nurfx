@@ -13,9 +13,44 @@ logger = logging.getLogger(__name__)
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 TIMEOUT_SECONDS = 15
 
+# Telegram rejects anything longer outright — a verbose analysis would reach
+# the user as nothing at all rather than as a truncated message.
+MAX_MESSAGE_CHARS = 4096
+
+
+def _split_message(text: str, limit: int = MAX_MESSAGE_CHARS) -> list[str]:
+    """Break a long message on line boundaries so HTML tags stay balanced."""
+    if len(text) <= limit:
+        return [text]
+
+    chunks, current = [], ""
+    for line in text.split("\n"):
+        # A single line over the limit is pathological; hard-cut it.
+        while len(line) > limit:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(line[:limit])
+            line = line[limit:]
+
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > limit:
+            chunks.append(current)
+            current = line
+        else:
+            current = candidate
+
+    if current:
+        chunks.append(current)
+    return chunks
+
 
 def send_telegram_message(chat_id: int, text: str) -> bool:
-    """Best-effort delivery. Returns True on success, never raises."""
+    """Best-effort delivery. Returns True if every part was sent, never raises."""
+    return all(_send_one(chat_id, part) for part in _split_message(text))
+
+
+def _send_one(chat_id: int, text: str) -> bool:
     token = settings.TELEGRAM_BOT_TOKEN
     if not token:
         logger.warning("TELEGRAM_BOT_TOKEN unset; cannot notify chat %s", chat_id)
