@@ -139,6 +139,9 @@ async def cmd_start(message: Message, state: FSMContext):
     if _is_admin(telegram_id):
         text += (
             "\n\n👨‍💻 <b>Admin:</b>\n"
+            "/stats — umumiy statistika\n"
+            "/users — foydalanuvchilar ro'yxati\n"
+            "/user ID — bitta foydalanuvchi haqida\n"
             "<code>/generate_coupon tokens=21 price=168000</code>"
         )
 
@@ -285,7 +288,7 @@ def create_bot() -> tuple[Bot, Dispatcher]:
     from aiogram.client.default import DefaultBotProperties
     from aiogram.fsm.storage.redis import RedisStorage
 
-    from apps.bot import analysis_flow
+    from apps.bot import admin_panel, analysis_flow
 
     bot = Bot(
         token=settings.TELEGRAM_BOT_TOKEN,
@@ -296,8 +299,9 @@ def create_bot() -> tuple[Bot, Dispatcher]:
     # halfway through picking a pair.
     dp = Dispatcher(storage=RedisStorage.from_url(settings.BOT_FSM_REDIS_URL))
 
-    # Command handlers first: /start and /cancel must win over the catch-all
-    # message handler that reads a custom currency pair.
+    # Command handlers first: /start, /cancel and the admin commands must win
+    # over the catch-all message handler that reads a custom currency pair.
     dp.include_router(router)
+    dp.include_router(admin_panel.router)
     dp.include_router(analysis_flow.router)
     return bot, dp

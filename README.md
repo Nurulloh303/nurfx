@@ -149,7 +149,19 @@ told.
 | `/buy` | Payment details |
 | `/redeem CODE` | Activate a coupon |
 | `/cancel` | Abandon the analysis in progress |
-| `/generate_coupon tokens=21 price=168000` | Admin only |
+
+Admin-only:
+
+| Command | Purpose |
+|---------|---------|
+| `/stats` | Users, analyses, signal split, tokens, revenue |
+| `/users` | Paginated user list with balances |
+| `/user <id\|email\|name>` | One user: balance, recent analyses, transactions |
+| `/generate_coupon tokens=21 price=168000` | Issue a coupon |
+
+The reporting commands are read-only by design — anything that moves tokens
+stays in the Django admin, where it is logged. Each handler re-checks the
+caller against `TELEGRAM_ADMIN_IDS`, pagination callbacks included.
 
 Admin IDs come from `TELEGRAM_ADMIN_IDS` in `.env`.
 
