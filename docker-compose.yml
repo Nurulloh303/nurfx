@@ -80,6 +80,11 @@ services:
     command: python -m apps.bot.runner
     volumes:
       - .:/app
+      # Must share the media volume with web and celery_worker: the bot writes
+      # the uploaded chart and the worker reads it back. Without this the bot
+      # writes into the bind-mounted source tree instead and the worker looks
+      # for the file on a different filesystem.
+      - media_data:/app/media
     env_file:
       - .env
     depends_on:
