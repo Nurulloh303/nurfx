@@ -3,6 +3,7 @@ import re
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -89,33 +90,45 @@ def website_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[SITE_BUTTON]])
 
 
-@router.message(CommandStart())
-async def cmd_start(message: Message):
-    telegram_id = message.from_user.id
-    balance = await _get_balance(telegram_id)
+@sync_to_async
+def _register_telegram_user(telegram_id: int, full_name: str):
+    from apps.authentication.services import get_or_create_telegram_user
 
-    if balance is not None:
-        from django.conf import settings as django_settings
-        cost = django_settings.NURFX_ANALYSIS_TOKEN_COST
-        text = (
-            f"<b>Assalomu alaykum! NurFX.ai botiga xush kelibsiz.</b>\n\n"
-            f"🌐 Grafiklarni AI orqali tahlil qilish <b>nurfxai.uz</b> saytida amalga oshiriladi.\n\n"
-            f"💰 Token balansingiz: <b>{balance}</b> token\n"
-            f"📊 Mavjud tahlillar: <b>{balance // cost}</b> ta\n\n"
-            f"<b>Buyruqlar:</b>\n"
-            f"/buy — Token sotib olish rekvizitlari\n"
-            f"/redeem KOD — Kuponni faollashtirish\n"
-            f"/balance — Balansni tekshirish"
+    user, created = get_or_create_telegram_user(telegram_id, full_name)
+    return user.tokens_balance, created
+
+
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext):
+    # /start is also the way out of a half-finished analysis conversation.
+    await state.clear()
+
+    telegram_id = message.from_user.id
+    balance, created = await _register_telegram_user(
+        telegram_id, message.from_user.full_name or ""
+    )
+
+    cost = settings.NURFX_ANALYSIS_TOKEN_COST
+    text = "<b>Assalomu alaykum! NurFX.ai botiga xush kelibsiz.</b>\n\n"
+
+    if created:
+        text += (
+            f"🎁 Sovg'a sifatida <b>{settings.NURFX_WELCOME_TOKENS} token</b> "
+            f"berildi — bu <b>{settings.NURFX_WELCOME_TOKENS // cost} ta bepul tahlil</b>.\n\n"
         )
-    else:
-        text = (
-            f"<b>Assalomu alaykum! NurFX.ai botiga xush kelibsiz.</b>\n\n"
-            f"🌐 Grafiklarni AI orqali tahlil qilish <b>nurfxai.uz</b> saytida amalga oshiriladi.\n\n"
-            f"<b>Buyruqlar:</b>\n"
-            f"/buy — Token sotib olish rekvizitlari\n"
-            f"/redeem KOD — Kuponni faollashtirish\n"
-            f"/balance — Balansni tekshirish"
-        )
+
+    text += (
+        f"📸 <b>Tahlil qilish uchun grafik skrinshotini shu yerga yuboring.</b>\n"
+        f"Keyin juftlik, timeframe va strategiyani tanlaysiz.\n\n"
+        f"💰 Balansingiz: <b>{balance}</b> token\n"
+        f"📊 Mavjud tahlillar: <b>{balance // cost}</b> ta "
+        f"<i>(har biri {cost} token)</i>\n\n"
+        f"<b>Buyruqlar:</b>\n"
+        f"/buy — Token sotib olish\n"
+        f"/redeem KOD — Kuponni faollashtirish\n"
+        f"/balance — Balansni tekshirish\n"
+        f"/cancel — Joriy tahlilni bekor qilish"
+    )
 
     if _is_admin(telegram_id):
         text += (
@@ -124,6 +137,15 @@ async def cmd_start(message: Message):
         )
 
     await message.answer(text, parse_mode="HTML", reply_markup=main_keyboard())
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    from apps.bot.analysis_flow import discard_state_image
+
+    await discard_state_image(state)
+    await state.clear()
+    await message.answer("❌ Bekor qilindi. Token yechilmadi.")
 
 
 @router.message(Command("buy"))
@@ -239,33 +261,37 @@ async def cmd_balance(message: Message):
     balance = await _get_balance(message.from_user.id)
     if balance is None:
         await message.answer(
-            "⚠️ Hisobingiz bog'lanmagan. Avval <b>nurfxai.uz</b> sayti orqali kiring.",
+            "⚠️ Hisobingiz topilmadi. /start buyrug'ini yuboring.",
             parse_mode="HTML",
-            reply_markup=website_keyboard(),
         )
-    else:
-        from django.conf import settings as django_settings
-        cost = django_settings.NURFX_ANALYSIS_TOKEN_COST
-        await message.answer(
-            f"💰 Token balansingiz: <b>{balance}</b> token\n"
-            f"📊 Mavjud tahlillar: <b>{balance // cost}</b> ta",
-            parse_mode="HTML",
-            reply_markup=website_keyboard(),
-        )
+        return
 
-
-@router.message(F.photo)
-async def handle_photo_analysis(message: Message):
+    cost = settings.NURFX_ANALYSIS_TOKEN_COST
     await message.answer(
-        "🌐 Grafiklarni tahlil qilish <b>nurfxai.uz</b> saytida amalga oshiriladi.\n\n"
-        "Tahlil o'tkazish uchun saytga o'ting:",
+        f"💰 Token balansingiz: <b>{balance}</b> token\n"
+        f"📊 Mavjud tahlillar: <b>{balance // cost}</b> ta\n\n"
+        f"📸 Tahlil uchun grafik skrinshotini yuboring.",
         parse_mode="HTML",
-        reply_markup=website_keyboard(),
     )
 
 
 def create_bot() -> tuple[Bot, Dispatcher]:
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-    dp = Dispatcher()
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.fsm.storage.redis import RedisStorage
+
+    from apps.bot import analysis_flow
+
+    bot = Bot(
+        token=settings.TELEGRAM_BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode="HTML"),
+    )
+
+    # Redis-backed FSM so a bot restart mid-conversation doesn't strand users
+    # halfway through picking a pair.
+    dp = Dispatcher(storage=RedisStorage.from_url(settings.BOT_FSM_REDIS_URL))
+
+    # Command handlers first: /start and /cancel must win over the catch-all
+    # message handler that reads a custom currency pair.
     dp.include_router(router)
+    dp.include_router(analysis_flow.router)
     return bot, dp

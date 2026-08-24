@@ -130,15 +130,42 @@ The system prompt is cached (`cache_control: ephemeral`), so repeat analyses pay
 - Postgres and Redis are not published to the host in `docker-compose.yml`; keep it that way
 - Do not serve `MEDIA_ROOT/charts/` from nginx — chart screenshots may contain account details
 
-## Telegram Admin Commands
+## Telegram Bot
 
-```
-/generate_coupon tokens=21 price=168000
-/redeem NURFX-8-X92A7K4T
-/balance
-```
+While the web frontend is being built, the bot is the primary channel: users
+run analyses in the chat and the same token economy applies.
 
-Admin IDs configured via `TELEGRAM_ADMIN_IDS` in `.env`.
+**User flow.** `/start` creates the account and credits the welcome bonus. The
+user sends a chart image, picks pair → timeframe → strategy, and tokens are
+deducted as the analysis is queued. The Celery worker posts the result back to
+the chat when it finishes, so nobody waits on a polling loop. If the analysis
+fails on its last retry, the tokens are refunded automatically and the user is
+told.
+
+| Command | Purpose |
+|---------|---------|
+| `/start` | Register, see balance, get instructions |
+| `/balance` | Token balance |
+| `/buy` | Payment details |
+| `/redeem CODE` | Activate a coupon |
+| `/cancel` | Abandon the analysis in progress |
+| `/generate_coupon tokens=21 price=168000` | Admin only |
+
+Admin IDs come from `TELEGRAM_ADMIN_IDS` in `.env`.
+
+The bot reuses `apps.analysis`, `apps.tokens.services`, and the Celery pipeline
+directly — it is a second entry point, not a second implementation, so the REST
+API keeps working unchanged and `apps/bot/analysis_flow.py` can be dropped once
+the site takes over.
+
+### Account linking (not yet built)
+
+Telegram accounts are created with a synthetic `tg-<id>@telegram.local`
+address. Users cannot set their own email here on purpose: the Google sign-in
+path attaches to an existing account by email, so an arbitrary address would
+let someone claim an account they do not own. Linking a Telegram account to a
+web account needs a one-time code issued to an already authenticated session —
+build that alongside the frontend.
 
 ## License
 

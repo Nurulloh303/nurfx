@@ -96,6 +96,27 @@ def deduct_analysis_tokens(user: User, analysis_id: str) -> int:
 
 
 @transaction.atomic
+def refund_analysis_tokens(user: User, analysis_id: str) -> int:
+    """Give back the cost of an analysis that never produced a result."""
+    from django.conf import settings
+
+    cost = settings.NURFX_ANALYSIS_TOKEN_COST
+    user_locked = User.objects.select_for_update().get(pk=user.pk)
+    user_locked.tokens_balance += cost
+    user_locked.save(update_fields=["tokens_balance", "updated_at"])
+
+    TokenTransaction.objects.create(
+        user=user_locked,
+        transaction_type=TokenTransaction.Type.ADMIN_ADJUSTMENT,
+        token_amount=cost,
+        description=f"Refund — analysis {analysis_id} failed",
+    )
+
+    logger.info("Refunded %d tokens to %s for analysis %s", cost, user_locked.email, analysis_id)
+    return user_locked.tokens_balance
+
+
+@transaction.atomic
 def create_coupon(token_amount: int, custom_price_uzs: int) -> TokenCoupon:
     """Generate a unique single-use coupon code."""
     if token_amount <= 0:

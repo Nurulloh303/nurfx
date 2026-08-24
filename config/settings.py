@@ -298,6 +298,10 @@ ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
 TELEGRAM_ADMIN_IDS = env.list("TELEGRAM_ADMIN_IDS", default=[])
 
+# Conversation state for the bot's analysis flow. Separate Redis db from the
+# Celery broker so flushing one never clears the other.
+BOT_FSM_REDIS_URL = env("BOT_FSM_REDIS_URL", default="redis://redis:6379/4")
+
 # ---------------------------------------------------------------------------
 # AI engine — one Claude Opus 5 vision call per analysis
 # ---------------------------------------------------------------------------

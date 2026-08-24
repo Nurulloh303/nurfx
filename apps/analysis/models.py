@@ -36,7 +36,12 @@ class Analysis(models.Model):
     error_message = models.TextField(blank=True)
 
     tokens_deducted = models.PositiveIntegerField(default=0)
+    tokens_refunded = models.BooleanField(default=False)
     celery_task_id = models.CharField(max_length=255, blank=True)
+
+    # Set when the analysis was requested through the Telegram bot; the worker
+    # delivers the result back to this chat. Null for web requests.
+    telegram_chat_id = models.BigIntegerField(null=True, blank=True, db_index=True)
 
     created_at = models.DateTimeField(default=timezone.now)
     completed_at = models.DateTimeField(null=True, blank=True)

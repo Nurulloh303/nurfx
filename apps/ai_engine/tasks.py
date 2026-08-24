@@ -44,26 +44,59 @@ def run_ai_pipeline(self, analysis_id: str):
         )
 
         logger.info("Analysis %s completed: %s", analysis_id, final.get("signal"))
+
+        from apps.bot.notifications import notify_analysis_complete
+
+        notify_analysis_complete(analysis)
         return {"analysis_id": analysis_id, "status": "completed"}
 
     except AnalysisRefused as exc:
         # A refusal is a decision about the content, not a transient fault —
         # retrying the identical request would only be declined again.
         logger.warning("Analysis %s refused: %s", analysis_id, exc)
-        _mark_failed(analysis, str(exc))
+        _mark_failed(analysis, str(exc), final_attempt=True)
         return {"analysis_id": analysis_id, "status": "failed", "error": str(exc)}
 
     except Exception as exc:
         logger.exception("Analysis %s failed", analysis_id)
-        _mark_failed(analysis, str(exc))
+        last_attempt = self.request.retries >= self.max_retries
+        _mark_failed(analysis, str(exc), final_attempt=last_attempt)
 
-        if self.request.retries < self.max_retries:
+        if not last_attempt:
             raise self.retry(exc=exc)
         return {"analysis_id": analysis_id, "status": "failed", "error": str(exc)}
 
 
-def _mark_failed(analysis, message: str) -> None:
+def _mark_failed(analysis, message: str, final_attempt: bool) -> None:
     analysis.status = analysis.Status.FAILED
     analysis.error_message = message[:2000]
     analysis.completed_at = timezone.now()
     analysis.save(update_fields=["status", "error_message", "completed_at"])
+
+    if not final_attempt:
+        # A retry is still coming; don't refund or notify yet.
+        return
+
+    refunded = _refund_once(analysis)
+
+    from apps.bot.notifications import notify_analysis_failed
+
+    notify_analysis_failed(analysis, refunded)
+
+
+def _refund_once(analysis) -> bool:
+    """Return the tokens for an analysis that will never produce a result."""
+    if analysis.tokens_refunded or not analysis.tokens_deducted:
+        return False
+
+    from apps.tokens.services import refund_analysis_tokens
+
+    try:
+        refund_analysis_tokens(analysis.user, str(analysis.id))
+    except Exception:
+        logger.exception("Refund failed for analysis %s", analysis.id)
+        return False
+
+    analysis.tokens_refunded = True
+    analysis.save(update_fields=["tokens_refunded"])
+    return True
